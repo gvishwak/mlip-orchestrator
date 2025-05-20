@@ -1,0 +1,56 @@
+{"model": {
+    "descriptor" :{
+        "type":		$descriptor,
+        "rcut_smth":	0.50,
+        "rcut":		6.00,
+        "neuron":		$emb_neurons_list,
+        "activation_function": $emb_activation,
+        "resnet_dt":	$resnet_dt,
+        "seed":		17
+    },
+    "fitting_net" : {
+        "type": 		"ener",
+        "neuron":		$neurons_list,
+        "activation_function": $activation,
+        "resnet_dt":	true,
+        "seed":		13
+    }
+},
+
+"learning_rate" :{
+            "type":		"exp",
+            "decay_steps":	5000,
+            "start_lr":	0.001,	
+            "stop_lr":	3.51e-8
+        },
+
+"loss" :{
+    "type":		"ener",
+    "start_pref_e":	0.02,
+    "limit_pref_e":	1,
+    "start_pref_f":	1000,
+    "limit_pref_f":	1,
+    "start_pref_v":	0,
+    "limit_pref_v":	0
+},
+
+"training" : {
+        "training_data": {
+                            "systems":		$training_systems,
+                            "set_prefix":	"set",
+                            "batch_size":	"auto"
+                        },
+        "validation_data":{
+                            "systems":		$validation_systems,
+                            "set_prefix":	"val",
+                            "batch_size":	"auto"
+                        },
+        "numb_steps":	1000000,
+        "seed":		23,
+        "disp_file":	"lcurve.out",
+        "disp_freq":	100,
+        "save_freq":	1000,
+        "tensorboard": false,
+        "tensorboard_log_dir": "tensorboard_log"
+    }
+}
