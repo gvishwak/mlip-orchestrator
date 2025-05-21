@@ -1,57 +1,47 @@
-## APL Machine Learning Workflow
+# MLIP-Orchestrator
+<!-- [![APL Machine Learning](https://img.shields.io/badge/APL-Machine%20Learning-blue)](https://pubs.aip.org/aip/apl) -->
 
-This repository provides a fully modular, end-to-end Python workflow for:
+A fully modular, end-to-end Python workflow for:
 
-1. **VASP AIMD simulations** (via `pymatgen`)
-2. **ML force field training** (DeepMD-kit, NequIP, Allegro) with GA hyperparameter optimization from the [genomix](https://github.com/gvishwak/genomix) package
+1. **VASP AIMD simulations**
+2. **ML force field training** (DeepMD-kit, NequIP, Allegro) with genetic algorithm driven hyperparameter optimization from the [GenomiX](https://github.com/gvishwak/genomix) package
 3. **Deployment** of trained models to portable formats
-4. **LAMMPS MD** simulations using ML potentials
+4. **Classical MD simulations with LAMMPS** using the trained ML potentials
 5. **Inelastic neutron scattering (INS) spectra** generation via OCLIMAX
 
-All data, code, and supplementary materials are publicly accessible to ensure full reproducibility.
 
 ---
+## Installation
 
-### 📥 1. Clone Repositories
 
-```bash
-# Main workflow repo
-git clone https://github.com/<your‑org>/apl‑ml‑workflow.git
-cd apl-ml-workflow
+### Dependencies
+- Python 3.8+
+- [VASP](https://www.vasp.at/) (licensed)
+- [LAMMPS](https://www.lammps.org/)
+- [DeePMD-kit](https://github.com/deepmodeling/deepmd-kit)
+- [NequIP](https://github.com/mir-group/nequip)
+- [Allegro](https://github.com/mir-group/allegro)
+- [OCLIMAX](https://sites.google.com/site/ornliceman/download)
+- [GenomiX](https://github.com/gvishwak/genomix)
 
-# genomix dependency
-git clone https://github.com/gvishwak/genomix.git extern/genomix
-```
 
-Set `GENOMIX_PATH=./extern/genomix` in your environment or update `PYTHONPATH`:
 
-```bash
-export PYTHONPATH="$PWD/extern/genomix:$PYTHONPATH"
-```
-
----
-
-### 🛠️ 2. Environment Setup
+### 🛠️ Environment Setup
 
 Create and activate a conda environment:
 
 ```bash
-conda create -n aplml python=3.10
-conda activate aplml
+conda env create -f environment.yaml
+conda activate mlip_workflow
 
-# Core dependencies
-pip install pymatgen dpdata ruamel.yaml scipy numpy pandas
-
-# Install VASP wrappers (non‑automated): ensure VASP is in your PATH
-# Install MLFF packages (user must install locally)
-#   deepmd-kit, nequip, allegro
-pip install deepmd-kit nequip allegro
-
+# Install other packages (follow instructions in the respective GitHub repos): deepmd-kit, nequip, allegro, genomix
 # Install OCLIMAX (follow instructions at https://sites.google.com/site/ornliceman/download)
+
+git clone https://github.com/gvishwak/mlip-orchestrator.git
 ```
 
+<!-- 
 ---
-
 ### ⚙️ 3. Directory Structure
 
 ```
@@ -64,10 +54,12 @@ apl-ml-workflow/
 │   └── lammps/            # LAMMPS input templates
 ├── extern/genomix/        # GA package
 └── README.md
-```
+``` -->
 
 ---
 
+## Workflow Usage
+<!-- 
 ### ▶️ 4. Workflow Execution
 
 Below is the typical sequence of function calls in a Python script (e.g. `run_all.py`):
@@ -120,77 +112,10 @@ generate_neutron_scattering_spectra(
 
 Individual steps can be run separately for debugging or parameter scans.
 
----
-
-### 📝 5. Function Reference
-
-* **VASP setup**: `poscar_from_cif()`, `create_potcar()`, `create_kpoints()`
-* **Data prep**: `generate_training_data()`, `merge_multiple_outcars_to_npy()`, `subsample_training_data()`
-* **MLFF training**: `train_mlff_model()` (wraps genomix GA and writes `<model>.yaml` or `input.json`)
-* **Deployment**: `deploy_trained_model()` writes portable `.pth` or `.pb`
-* **LAMMPS MD**: `run_lammps_md()` (calls `vasp_coordinates_at_T()`, `write_lammps_inputs()`)
-* **INS spectra**: `generate_neutron_scattering_spectra()`
-
-For detailed parameter descriptions, see docstrings in `utils.py` and `wrapper.py`.
-
----
-
-### 🤝 Contributing
-
-Please submit issues or pull requests to add new features, fix bugs, or improve documentation.
-
----
-
-### 📜 License
-
-This work is released under the MIT License.
+--- -->
 
 
-
-
-
-
-
-
-
-
-
-
-
------------------------------------------------------
------------------------------------------------------
------------------------------------------------------
------------------------------------------------------
------------------------------------------------------
-
-
-# MLFF Development Workflow
-
-[![APL Machine Learning](https://img.shields.io/badge/APL-Machine%20Learning-blue)](https://pubs.aip.org/aip/apl)
-
-End-to-end workflow for developing machine learning force fields (MLFFs) with VASP, LAMMPS, and genetic algorithm optimization.
-
-## Installation
-
-```
-git clone https://github.com/yourusername/mlff-workflow
-git clone https://github.com/gvishwak/genomix
-cd mlff-workflow
-pip install -r requirements.txt
-pip install -e ../genomix
-```
-
-### Dependencies
-- Python 3.8+
-- [VASP](https://www.vasp.at/) (licensed)
-- [LAMMPS](https://www.lammps.org/)
-- [DeePMD-kit](https://github.com/deepmodeling/deepmd-kit)
-- [NequIP](https://github.com/mir-group/nequip)
-- [Allegro](https://github.com/mir-group/allegro)
-- [OCLIMAX](https://sites.google.com/site/ornliceman/download)
-
-## Workflow Usage
-
+<!-- 
 ### 1. VASP AIMD Setup
 ```
 from workflow import MLFFWorkflow
@@ -237,21 +162,12 @@ wf.run_lammps({
 wf.analyze_results()
 ```
 
-## Workflow Diagram
+## Workflow Diagram -->
 
-```
-graph TD
-    A[Structure Input] --> B(VASP AIMD)
-    B --> C{Training Data}
-    C --> D[DeepMD]
-    C --> E[NequIP]
-    C --> F[Allegro]
-    D --> G[GA Optimization]
-    E --> G
-    F --> G
-    G --> H[Validation]
-    H --> I[Neutron Spectra]
-```
+
+
+
+
 
 ## Citation
 Please cite our work and the supporting packages:
@@ -268,5 +184,14 @@ Please cite our work and the supporting packages:
 For questions or issues, please open a GitHub issue or contact [your.email@institution.edu](mailto:your.email@institution.edu).
 
 
+### 🤝 Contributing
+
+Please submit issues or pull requests to add new features, fix bugs, or improve documentation.
+
+---
+
+### 📜 License
+
+This work is released under the MIT License.
 
 

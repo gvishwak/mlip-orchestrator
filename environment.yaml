@@ -1,0 +1,26 @@
+name: mlip_workflow
+channels:
+  - conda-forge
+  - pytorch
+  - nvidia
+  - defaults
+dependencies:
+  - python
+  - cudnn
+  - openmpi
+  - cmake
+  - seaborn
+  - ipykernel
+  - ruamel.yaml
+  - pytorch
+  - pytorch-cuda=12.4
+  - pip
+  - pip:
+    - nequip
+    - mkl-include
+    - pymatgen
+    - seaborn
+    - clang-format
+    - dpdata
+
+

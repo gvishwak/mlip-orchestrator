@@ -8,7 +8,7 @@ from pymatgen.io.lammps.inputs import LammpsRun
 from pymatgen.io.vasp.inputs import Incar, Poscar, Kpoints
 from pymatgen.io.vasp.outputs import Vasprun, Xdatcar
 from string import Template
-from typing import Callable, Dict, Tuple
+from typing import Callable, Dict, Tuple, Any
 from utils import *
 from wrapper import *
 
@@ -117,23 +117,36 @@ class VASP_AIMD:
 
 class MLFF_Trainer:
 	"""Class for MLFF training with genetic algorithm optimization"""
-	
+
 	def __init__(self, data_paths: Dict[str, Path]):
 		self.data_paths = self._validate_data_paths(data_paths)
 		self.ga_config = None
 		self.performance_func = self.calculate_spectral_overlap
 
 
-	def _validate_data_paths(self, paths: Dict[str, Path]) -> Dict[str, Path]:
+	def _validate_paths(self, paths: Dict[str, Path], path_type: str) -> Dict[str, Path]:
 		"""Validate training data paths"""
 		valid_formats = ["deepmd", "nequip", "allegro"]
-		for fmt, path in paths.items():
-			if fmt not in valid_formats:
-				raise ValueError(f"Invalid format {fmt}, must be one of {valid_formats}")
-			if not path.exists():
-				raise FileNotFoundError(f"Training data path {path} not found")
-			if fmt in ["nequip", "allegro"] and path.suffix != '.npz':
-				raise ValueError("Nequip and Allegro require .npz files. Refer to their documentation on proper file generation.")
+		if path_type == 'data':
+			for fmt, path in paths.items():
+				if fmt not in valid_formats:
+					raise ValueError(f"Invalid format {fmt}, must be one of {valid_formats}")
+				if not path.exists():
+					raise FileNotFoundError(f"Training data path {path} not found")
+				if fmt in ["nequip", "allegro"] and path.suffix != '.npz':
+					raise ValueError("Nequip and Allegro require .npz files. Refer to their documentation on proper file generation.")
+
+		elif path_type == 'mlip_input_file':
+			for fmt, path in paths.items():
+				if fmt not in valid_formats:
+					raise ValueError(f"Invalid format {fmt}, must be one of {valid_formats}")
+				if not path.exists():
+					raise FileNotFoundError(f"Training data path {path} not found")
+				if fmt in ["nequip", "allegro"] and path.suffix not in ['.yaml', '.yml']:
+					raise ValueError("Nequip and Allegro require .yml input files. Refer to their documentation on proper file generation.")
+				if fmt == 'deepmd' and path.suffix != '.json':
+					raise ValueError("DeePMDKit requires .json input files. Refer to their documentation on proper file generation.")
+
 		return paths
 
 
@@ -173,16 +186,23 @@ class MLFF_Trainer:
 		}
 
 
-	def train_models(self, fitness_values_dict: dict, batch_mode: bool = True) -> list | Tuple[pd.DataFrame, dict]:
+	def generate_population(self, fitness_values_dict: dict, batch_mode: bool = True) -> list | Tuple[pd.DataFrame, dict]:
 		"""Train models using genetic algorithm"""
 		if not self.ga_config:
 			raise ValueError("GA configuration not set - call configure_ga() first")
-			
+
 		ga = GeneticAlgorithm(**self.ga_config)
 		if batch_mode:
 			ga_population = ga.search(batch_mode=batch_mode, fitness_dict=fitness_values_dict)
 
-		return 
+		return ga_population
+
+
+	def generate_mlip_input_files(self, mlip_input_file_paths: Dict[str, Path], input_parameters: Dict[str, Dict]):
+		mlip_input_file_paths = self._validate_paths(mlip_input_file_paths, 'mlip_input_file')
+		mlip_template = {k: Template(Path(mlip_input_file_paths[k]).read_text()).substitute(input_parameters[k]) for k in mlip_input_file_paths}
+		if 'deepmd' in mlip_template:
+			mlip_template['deepmd'] = json.loads(mlip_template['deepmd'])
 
 
 	def calculate_spectral_overlap(
@@ -193,7 +213,8 @@ class MLFF_Trainer:
 		"""Default model performance function using neutron spectra"""
 		# Implementation details would interface with OCLIMAX
 		return self._run_oclimax_simulation(model_path, reference_spectrum)
-	
+
+
 	def _run_oclimax_simulation(self, model_path: Path, reference: Path) -> float:
 		"""Calculate spectral similarity metric"""
 		# Actual implementation would run simulations and calculate overlap
@@ -203,18 +224,18 @@ class MLFF_Trainer:
 
 class LAMMPS_MD:
 	"""Class for LAMMPS simulations and results analysis"""
-	
+
 	def __init__(self, structure: Structure):
 		self.structure = structure
 		self._validate_structure()
-		
+
 	def _validate_structure(self):
 		"""Validate input structure"""
 		if not isinstance(self.structure, Structure):
 			raise TypeError("Input must be pymatgen Structure object")
 		if len(self.structure) == 0:
 			raise ValueError("Structure contains no atoms")
-	
+
 	def run_simulation(
 		self, 
 		potential_path: Path, 
@@ -229,7 +250,7 @@ class LAMMPS_MD:
 		self._write_lammps_inputs(potential_path, template, output_dir)
 		self._execute_lammps(output_dir)
 		return output_dir
-	
+
 	def _write_lammps_inputs(self, potential: Path, template: str, output_dir: Path):
 		"""Generate LAMMPS input files"""
 		lammps_data = LammpsData.from_structure(self.structure)
@@ -247,7 +268,7 @@ class LAMMPS_MD:
 			
 		with open(output_dir/"in.lammps", "w") as f:
 			f.write(script)
-	
+
 	def _execute_lammps(self, output_dir: Path):
 		"""Execute LAMMPS simulation"""
 		try:
@@ -259,7 +280,7 @@ class LAMMPS_MD:
 			)
 		except subprocess.CalledProcessError as e:
 			raise RuntimeError(f"LAMMPS execution failed: {e.stderr.decode()}")
-	
+
 	def generate_neutron_spectra(
 		self, 
 		lammps_dir: Path,
@@ -272,12 +293,12 @@ class LAMMPS_MD:
 		output_dir.mkdir(exist_ok=True)
 		self._run_oclimax(lammps_dir, output_dir)
 		return self._process_spectra(output_dir)
-	
+
 	def _run_oclimax(self, lammps_dir: Path, output_dir: Path):
 		"""Execute OCLIMAX workflow"""
 		# Actual implementation would interface with OCLIMAX
 		pass
-	
+
 	def _process_spectra(self, output_dir: Path) -> pd.DataFrame:
 		"""Process raw spectral data"""
 		# Return processed spectral data
