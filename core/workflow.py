@@ -198,27 +198,32 @@ class MLFF_Trainer:
 		return ga_population
 
 
-	def generate_mlip_input_files(self, mlip_input_file_paths: Dict[str, Path], input_parameters: Dict[str, Dict]):
+	def generate_mlip_input_files(self, mlip_input_file_paths: Dict[str, Path], input_parameters: Dict[str, Dict], output_dir: Dict[str, Path] = {}):
+		output_dir = Path.cwd() if not output_dir else output_dir
 		mlip_input_file_paths = self._validate_paths(mlip_input_file_paths, 'mlip_input_file')
 		mlip_template = {k: Template(Path(mlip_input_file_paths[k]).read_text()).substitute(input_parameters[k]) for k in mlip_input_file_paths}
-		if 'deepmd' in mlip_template:
-			mlip_template['deepmd'] = json.loads(mlip_template['deepmd'])
+		for model_name, f_text in mlip_template.items():
+			if model_name == 'deepmd':
+				json_file = Path(output_dir / model_name / 'input.json').open('w')
+				json.dump(json.loads(f_text), json_file, indent=4)
+			else:
+				Path(output_dir / model_name / f'{model_name}.yaml').write_text(f_text)
 
 
-	def calculate_spectral_overlap(
-		self, 
-		model_path: Path, 
-		reference_spectrum: Path
-	) -> float:
-		"""Default model performance function using neutron spectra"""
-		# Implementation details would interface with OCLIMAX
-		return self._run_oclimax_simulation(model_path, reference_spectrum)
+	def deploy_models(self, trained_models):
+		"""Convert trained models to production formats"""
+		for name, path in trained_models.items():
+			if "deepmd" in name:
+				os.system(f"dp compress -i {path} -o {path}_compressed.pb")
+			elif "nequip" in name:
+				os.system(f"nequip-deploy convert {path} {path}.pth")
+			elif "allegro" in name:
+				shutil.copy(path, self.output_dir/"deployed")
 
 
 	def _run_oclimax_simulation(self, model_path: Path, reference: Path) -> float:
-		"""Calculate spectral similarity metric"""
-		# Actual implementation would run simulations and calculate overlap
-		return np.random.random()  # Placeholder
+		pass
+
 
 
 
@@ -308,149 +313,4 @@ class LAMMPS_MD:
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-class MLFFWorkflow:
-	def __init__(self, structure_path, output_dir="results"):
-		self.structure = self._load_structure(structure_path)
-		self.output_dir = Path(output_dir)
-		self.output_dir.mkdir(exist_ok=True)
-
-
-	def _load_structure(self, path):
-		"""Load structure from CIF/POSCAR/CONTCAR"""
-		path = Path(path)
-		if path.suffix == ".cif":
-			return CifParser(str(path)).get_structures()[0]
-		return Poscar.from_file(str(path)).structure
-
-
-	def setup_vasp_simulation(self, temp=150, timestep=1, steps=10000):
-		"""Configure VASP AIMD simulation"""
-		vasp_dir = self.output_dir/"vasp_aimd"
-		vasp_dir.mkdir(exist_ok=True)
-		
-		# Create input files
-		incar_path = "templates/vasp/INCAR" if Path("templates/vasp/INCAR").exists() else None
-		if incar_path:
-			shutil.copy(incar_path, vasp_dir/"INCAR")
-		else:
-			Incar.from_dict({
-				"IBRION": 0, "NSW": steps, "POTIM": timestep,
-				"TEBEG": temp, "TEEND": temp, "SMASS": 0.5
-			}).write_file(vasp_dir/"INCAR")
-			
-		Poscar(self.structure).write_file(vasp_dir/"POSCAR")
-		Kpoints.gamma_automatic().write_file(vasp_dir/"KPOINTS")
-		
-		print(f"VASP inputs created in {vasp_dir}. Provide POTCAR to run.")
-
-
-	def generate_ml_data(self, vasp_run_dir):
-		"""Convert AIMD data to ML training formats"""
-		LabeledSystem(vasp_run_dir, fmt="vasp/outcar").to(
-			"deepmd/npy", self.output_dir/"deepmd_data"
-		)
-		convert_to_nequip(vasp_run_dir, self.output_dir/"nequip_data")
-		convert_to_allegro(vasp_run_dir, self.output_dir/"allegro_data")
-
-
-	def train_models(self, ga_config):
-		"""Train MLFFs with genetic algorithm optimization"""
-		ga = GeneticAlgorithm(
-			objective_function=self._model_fitness,
-			**ga_config
-		)
-		return ga.search()
-
-
-	def _model_fitness(self, params):
-		"""Evaluate model performance using validation data"""
-		# Implementation details in wrapper.py
-		pass
-
-
-	def deploy_models(self, trained_models):
-		"""Convert trained models to production formats"""
-		for name, path in trained_models.items():
-			if "deepmd" in name:
-				os.system(f"dp compress -i {path} -o {path}_compressed.pb")
-			elif "nequip" in name:
-				os.system(f"nequip-deploy convert {path} {path}.pth")
-			elif "allegro" in name:
-				shutil.copy(path, self.output_dir/"deployed")
-
-
-	def run_lammps(self, potentials):
-		"""Run LAMMPS simulations with trained potentials"""
-		for name, potential in potentials.items():
-			run_lammps_md(
-				structure=self.structure,
-				potential=potential,
-				template=f"templates/lammps/{name}.lmp",
-				output_dir=self.output_dir/f"lammps_{name}"
-			)
-
-
-	def analyze_results(self):
-		"""Generate neutron scattering spectra and plots"""
-		generate_neutron_scattering_spectra(
-			self.output_dir/"vasp_aimd",
-			self.output_dir/"lammps_results",
-			self.output_dir/"analysis"
-		)
 
