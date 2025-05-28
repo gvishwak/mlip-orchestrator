@@ -14,7 +14,7 @@ from wrapper import *
 
 import numpy as np
 import pandas as pd
-import os, time, random, json, shutil, subprocess
+import os, time, random, json, shutil, subprocess, shlex
 
 
 
@@ -127,25 +127,30 @@ class MLFF_Trainer:
 	def _validate_paths(self, paths: Dict[str, Path], path_type: str) -> Dict[str, Path]:
 		"""Validate training data paths"""
 		valid_formats = ["deepmd", "nequip", "allegro"]
-		if path_type == 'data':
-			for fmt, path in paths.items():
-				if fmt not in valid_formats:
-					raise ValueError(f"Invalid format {fmt}, must be one of {valid_formats}")
-				if not path.exists():
-					raise FileNotFoundError(f"Training data path {path} not found")
+
+		for fmt, path in paths.items():
+			if fmt not in valid_formats:
+				raise ValueError(f"Invalid format {fmt}, must be one of {valid_formats}")
+			if not path.exists():
+				raise FileNotFoundError(f"Training data path {path} not found")
+
+			if path_type == 'data':
 				if fmt in ["nequip", "allegro"] and path.suffix != '.npz':
 					raise ValueError("Nequip and Allegro require .npz files. Refer to their documentation on proper file generation.")
 
-		elif path_type == 'mlip_input_file':
-			for fmt, path in paths.items():
-				if fmt not in valid_formats:
-					raise ValueError(f"Invalid format {fmt}, must be one of {valid_formats}")
-				if not path.exists():
-					raise FileNotFoundError(f"Training data path {path} not found")
+			elif path_type == 'mlip_input_file':
 				if fmt in ["nequip", "allegro"] and path.suffix not in ['.yaml', '.yml']:
 					raise ValueError("Nequip and Allegro require .yml input files. Refer to their documentation on proper file generation.")
 				if fmt == 'deepmd' and path.suffix != '.json':
 					raise ValueError("DeePMDKit requires .json input files. Refer to their documentation on proper file generation.")
+
+			elif path_type == 'deploy':
+				if fmt in ['nequip', 'allegro']:
+					if 'best_model.pth' not in path.iterdir():
+						raise FileNotFoundError(f"Trained potential file not found at {path}.")
+				elif fmt == 'deepmd':
+					if not any([True for i in path.iterdir() if 'model.ckpt-' in i]):
+						raise FileNotFoundError(f"Trained potential file not found at {path}.")
 
 		return paths
 
@@ -210,19 +215,16 @@ class MLFF_Trainer:
 				Path(output_dir / model_name / f'{model_name}.yaml').write_text(f_text)
 
 
-	def deploy_models(self, trained_models):
+	def deploy_models(self, trained_models: Dict[str, Path]):
 		"""Convert trained models to production formats"""
-		for name, path in trained_models.items():
-			if "deepmd" in name:
-				os.system(f"dp compress -i {path} -o {path}_compressed.pb")
-			elif "nequip" in name:
-				os.system(f"nequip-deploy convert {path} {path}.pth")
-			elif "allegro" in name:
-				shutil.copy(path, self.output_dir/"deployed")
+		trained_models = self._validate_paths(trained_models, 'deploy')
+		for fmt, path in trained_models.items():
+			if fmt in ['nequip', 'allegro']:
+				cmd = f'nequip-deploy build --train-dir {path} {fmt}.pth'
+			elif fmt == 'deepmd':
+				cmd = f'dp freeze -o {fmt}.pb'
 
-
-	def _run_oclimax_simulation(self, model_path: Path, reference: Path) -> float:
-		pass
+			r = subprocess.run(shlex.split(cmd), capture_output=True, text=True)
 
 
 
@@ -241,12 +243,8 @@ class LAMMPS_MD:
 		if len(self.structure) == 0:
 			raise ValueError("Structure contains no atoms")
 
-	def run_simulation(
-		self, 
-		potential_path: Path, 
-		template: str = "nvt",
-		output_dir: Path = Path("lammps_sim")
-	) -> Path:
+
+	def run_simulation(self, potential_path: Path, template: str = "nvt", output_dir: Path = Path("lammps_sim")) -> Path:
 		"""Run LAMMPS simulation with validation"""
 		if not potential_path.exists():
 			raise FileNotFoundError(f"Potential file {potential_path} not found")
@@ -255,6 +253,7 @@ class LAMMPS_MD:
 		self._write_lammps_inputs(potential_path, template, output_dir)
 		self._execute_lammps(output_dir)
 		return output_dir
+
 
 	def _write_lammps_inputs(self, potential: Path, template: str, output_dir: Path):
 		"""Generate LAMMPS input files"""
@@ -274,6 +273,7 @@ class LAMMPS_MD:
 		with open(output_dir/"in.lammps", "w") as f:
 			f.write(script)
 
+
 	def _execute_lammps(self, output_dir: Path):
 		"""Execute LAMMPS simulation"""
 		try:
@@ -285,30 +285,6 @@ class LAMMPS_MD:
 			)
 		except subprocess.CalledProcessError as e:
 			raise RuntimeError(f"LAMMPS execution failed: {e.stderr.decode()}")
-
-	def generate_neutron_spectra(
-		self, 
-		lammps_dir: Path,
-		output_dir: Path = Path("spectra")
-	) -> pd.DataFrame:
-		"""Generate neutron scattering spectra using OCLIMAX"""
-		if not (lammps_dir/"log.lammps").exists():
-			raise FileNotFoundError("LAMMPS output not found")
-			
-		output_dir.mkdir(exist_ok=True)
-		self._run_oclimax(lammps_dir, output_dir)
-		return self._process_spectra(output_dir)
-
-	def _run_oclimax(self, lammps_dir: Path, output_dir: Path):
-		"""Execute OCLIMAX workflow"""
-		# Actual implementation would interface with OCLIMAX
-		pass
-
-	def _process_spectra(self, output_dir: Path) -> pd.DataFrame:
-		"""Process raw spectral data"""
-		# Return processed spectral data
-		return pd.DataFrame()
-
 
 
 
