@@ -1,16 +1,14 @@
 from dpdata import LabeledSystem
 from genomix import GeneticAlgorithm
-from math import isclose
 from pathlib import Path
 from pymatgen.core import Structure
 from pymatgen.io.lammps.data import LammpsData
 from pymatgen.io.lammps.inputs import LammpsRun
-from pymatgen.io.vasp.inputs import Incar, Poscar, Kpoints
+from pymatgen.io.vasp.inputs import Incar, Poscar, Kpoints, PotcarSingle
 from pymatgen.io.vasp.outputs import Vasprun, Xdatcar
 from string import Template
 from typing import Callable, Dict, Tuple, Any
 from utils import *
-from wrapper import *
 
 import numpy as np
 import pandas as pd
@@ -19,28 +17,10 @@ import os, time, random, json, shutil, subprocess, shlex
 
 
 class VASP_AIMD:
-	"""Class for setting up and managing VASP AIMD simulations"""
-	
+	"""Class for setting up and managing VASP AIMD simulations."""
+
 	def __init__(self, structure_path: str):
-		self.structure = self._load_structure(structure_path)
-		self._validate_structure()
-
-
-	def _load_structure(self, path: str) -> Structure:
-		"""Load structure from CIF, POSCAR/CONTCAR, CHGCAR, LOCPOT, vasprun.xml, CSSR, Netcdf and pymatgen's JSON-serialized structures."""
-		path = Path(path)
-		if not path.exists():
-			raise FileNotFoundError(f"Structure file {path} not found")
-			
-		return Structure.from_file(path)
-
-
-	def _validate_structure(self):
-		"""Validate structure input"""
-		if len(self.structure) == 0:
-			raise ValueError("Invalid structure - contains no atoms")
-		if not self.structure.is_ordered:
-			raise ValueError("Structure contains partial occupancies - not supported")
+		self.structure = load_structure(structure_path)
 
 
 	def _create_incar(self, path: Path, incar_template_path: str|bool = False, incar_dict: dict|bool = False):
@@ -230,63 +210,20 @@ class MLFF_Trainer:
 
 
 class LAMMPS_MD:
-	"""Class for LAMMPS simulations and results analysis"""
+	"""Class for setting up and managing LAMMPS simulations."""
 
-	def __init__(self, structure: Structure):
-		self.structure = structure
-		self._validate_structure()
-
-	def _validate_structure(self):
-		"""Validate input structure"""
-		if not isinstance(self.structure, Structure):
-			raise TypeError("Input must be pymatgen Structure object")
-		if len(self.structure) == 0:
-			raise ValueError("Structure contains no atoms")
+	def __init__(self, structure_path: str):
+		self.structure = load_structure(structure_path)
 
 
-	def run_simulation(self, potential_path: Path, template: str = "nvt", output_dir: Path = Path("lammps_sim")) -> Path:
-		"""Run LAMMPS simulation with validation"""
-		if not potential_path.exists():
-			raise FileNotFoundError(f"Potential file {potential_path} not found")
-			
+	def run_simulation(self, template: Path, lammps_input_tags: dict, output_dir: Path) -> Path:
 		output_dir.mkdir(exist_ok=True)
-		self._write_lammps_inputs(potential_path, template, output_dir)
-		self._execute_lammps(output_dir)
-		return output_dir
 
-
-	def _write_lammps_inputs(self, potential: Path, template: str, output_dir: Path):
-		"""Generate LAMMPS input files"""
 		lammps_data = LammpsData.from_structure(self.structure)
-		lammps_data.write_file(output_dir/"structure.lmp")
-		
-		template_path = f"templates/lammps/{template}.lmp"
-		if not Path(template_path).exists():
-			raise FileNotFoundError(f"Template {template_path} not found")
-			
-		with open(template_path) as f:
-			script = f.read().format(
-				potential_path=potential,
-				structure_path=output_dir/"structure.lmp"
-			)
-			
-		with open(output_dir/"in.lammps", "w") as f:
-			f.write(script)
+		lammps_template = Path(template).read_text()
+		lammps_obj = LammpsRun(script_template=lammps_template, settings=lammps_input_tags, script_filename='in.lammps', data=lammps_data)
+		lammps_obj.write_inputs(output_dir)
 
-
-	def _execute_lammps(self, output_dir: Path):
-		"""Execute LAMMPS simulation"""
-		try:
-			subprocess.run(
-				["lmp", "-in", "in.lammps"],
-				cwd=output_dir,
-				check=True,
-				capture_output=True
-			)
-		except subprocess.CalledProcessError as e:
-			raise RuntimeError(f"LAMMPS execution failed: {e.stderr.decode()}")
-
-
-
+		return output_dir
 
 
